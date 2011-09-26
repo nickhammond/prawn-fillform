@@ -120,5 +120,5 @@ module Prawn
 end
 
 require 'prawn/document'
-Prawn::Document.send(:include, Prawn::Forms)
+Prawn::Document.send(:include, Prawn::Fillform)
 
