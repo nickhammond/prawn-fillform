@@ -10,7 +10,6 @@ $ gem install prawn-fillform
 
 ```ruby
 require 'prawn-fillform'
-```
 
 data = {}
 data[:page_1] = {}
@@ -22,6 +21,7 @@ data[:page_1][:photo] = "test.jpg"
 Prawn::Document.generate "output.pdf", :template => "template.pdf"  do |pdf|
   pdf.fill_form_with(data)
 end
+```
 
 Take a look in `examples` folder
 
