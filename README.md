@@ -7,6 +7,9 @@ $ gem install prawn-fillform
 ```
 
 ## Usage
+Create a PDF form with Scribus, Adobe Products or something else. I have only tested this with Scribus.
+Currently only text fields and buttons are supported. Buttons are replaced by images.
+
 
 ```ruby
 require 'prawn-fillform'
