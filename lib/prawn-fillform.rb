@@ -50,23 +50,33 @@ module Prawn
         deref(@dictionary[:Ff])
       end
 
+      def font_size
+        deref(@dictionary[:DA]).split(" ")[1].to_f
+      end
+
+      def font_color
+        Prawn::Graphics::Color.rgb2hex(deref(@dictionary[:DA]).split(" ")[3..5].collect { |e| e.to_f * 255 }).to_s
+      end
+
     end
 
     class Text < Field
 
       def align
-        case deref(@dictionary[:Q])
+        case deref(@dictionary[:Q]).to_i
         when 0
           :left
         when 1
           :center
         when 2
           :right
+        else
+          :left
         end
       end
 
       def max_length
-        deref(@dictionary[:MaxLen])
+        deref(@dictionary[:MaxLen]).to_i
       end
 
       def type
@@ -108,6 +118,16 @@ module Prawn
       end
     end
 
+    def acroform_field_names
+      result = []
+      acroform_fields.each do |page, fields|
+        fields.each do |field|
+          result << field.name
+        end
+      end
+      result
+    end
+
     def acroform_fields
       acroform = {}
       state.pages.each_with_index do |page, i|
@@ -139,20 +159,24 @@ module Prawn
         fields.each do |field|
           number = page.to_s.split("_").last.to_i
           go_to_page(number)
-          value = data[page][field.name] rescue nil
+          value = data[page][field.name].fetch(:value) rescue nil
+          options = data[page][field.name].fetch(:options) rescue nil
+          options ||= {}
 
           if value
-            if field.instance_of? Prawn::Fillform::Text
-              text_box value, :at => [field.x, field.y],
-                                    :align => field.align,
-                                    :width => field.width,
-                                    :height => field.height,
-                                    :valign => :center
-            elsif field.instance_of? Prawn::Fillform::Button
-              image value, :at => [field.x, field.y],
-                                 :position => :center,
-                                 :vposition => :center,
-                                 :fit => [field.width, field.height]
+            if field.type == :text
+              fill_color options[:font_color] || field.font_color
+              text_box value, :at => [field.x + 2, field.y - 1],
+                                    :align => options[:align] || field.align,
+                                    :width => options[:width] || field.width,
+                                    :height => options[:height] || field.height,
+                                    :valign => options[:valign] || :center,
+                                    :size => options[:font_size] || field.font_size
+            elsif field.type == :button
+              image value, :at => [field.x + 2, field.y - 1],
+                                 :position =>  options[:position] || :center,
+                                 :vposition => options[:vposition] || :center,
+                                 :fit => options[:fit] || [field.width, field.height]
             end
           end
         end
