@@ -3,115 +3,166 @@ require 'prawn-fillform/version'
 module Prawn
   module Fillform
 
+    class Field
+      include Prawn::Document::Internals
+
+      def initialize(dictionary)
+        @dictionary = dictionary
+      end
+
+      def description
+        deref(@dictionary[:TU])
+      end
+
+      def rect
+        deref(@dictionary[:Rect])
+      end
+
+      def name
+        deref(@dictionary[:T]).to_sym
+      end
+
+      def x
+        rect[0]
+      end
+
+      def y
+        rect[3]
+      end
+
+      def width
+        rect[2] - rect[0]
+      end
+
+      def height
+        rect[3] - rect[1]
+      end
+
+      def value
+        deref(@dictionary[:V])
+      end
+
+      def default_value
+        deref(@dictionary[:DV])
+      end
+
+      def flags
+        deref(@dictionary[:Ff])
+      end
+
+    end
+
+    class Text < Field
+
+      def align
+        case deref(@dictionary[:Q])
+        when 0
+          :left
+        when 1
+          :center
+        when 2
+          :right
+        end
+      end
+
+      def max_length
+        deref(@dictionary[:MaxLen])
+      end
+
+      def type
+        :text
+      end
+    end
+
+    class Button < Field
+      def type
+        :button
+      end
+    end
+
+    class References
+      include Prawn::Document::Internals
+      def initialize(state)
+        @state = state
+        @refs = []
+        collect!
+      end
+
+      def delete!
+        @refs.each do |ref|
+          ref[:annots].delete(ref[:ref])
+        end
+      end
+
+      protected
+      def collect!
+        @state.pages.each_with_index do |page, i|
+          @annots = deref(page.dictionary.data[:Annots])
+          @annots.map do |ref|
+            reference = {}
+            reference[:ref] = ref
+            reference[:annots] = @annots
+            @refs << reference
+          end
+        end
+      end
+    end
+
+    def acroform_fields
+      acroform = {}
+      state.pages.each_with_index do |page, i|
+        annots = deref(page.dictionary.data[:Annots])
+        page_number = "page_#{i+1}".to_sym
+        acroform[page_number] = []
+        acroform[page_number] = []
+        annots.map do |ref|
+          dictionary = deref(ref)
+
+          next unless deref(dictionary[:Type]) == :Annot and deref(dictionary[:Subtype]) == :Widget
+          next unless (deref(dictionary[:FT]) == :Tx || deref(dictionary[:FT]) == :Btn)
+
+          type = deref(dictionary[:FT]).to_sym
+          case type
+          when :Tx
+            acroform[page_number] << Text.new(dictionary)
+          when :Btn
+            acroform[page_number] << Button.new(dictionary)
+          end
+        end
+      end
+      acroform
+    end
+
     def fill_form_with(data={})
 
-      1.upto(acroform_number_of_pages).each do |page|
-
-
-        page_number = "page_#{page}".to_sym
-        fields = acroform_fields_for(page_number)
+      acroform_fields.each do |page, fields|
         fields.each do |field|
-          x = field[:x]
-          y = field[:y]
-          value = data[page_number][field.fetch(:name)] rescue nil
-          go_to_page(field[:page_number])
+          number = page.to_s.split("_").last.to_i
+          go_to_page(number)
+          value = data[page][field.name] rescue nil
 
-          if field[:type] == :image
-            image value, :at => [x, y], :position => :center, :vposition => :center, :fit => [field[:width], field[:height]] if value
-          else
-            text_box value, :at => [x, y], :align => field[:align],
-                            :width => field[:width], :height => field[:height],
-                            :valign => :center, :align => :left, :single_line => !field[:multi_line], :size => field[:size] if value
+          if value
+            if field.instance_of? Prawn::Fillform::Text
+              text_box value, :at => [field.x, field.y],
+                                    :align => field.align,
+                                    :width => field.width,
+                                    :height => field.height,
+                                    :valign => :center
+            elsif field.instance_of? Prawn::Fillform::Button
+              image value, :at => [field.x, field.y],
+                                 :position => :center,
+                                 :vposition => :center,
+                                 :fit => [field.width, field.height]
+            end
           end
         end
       end
 
-      # delete acroform references
-      acroform_specifications.last.each do |reference|
-        reference[:acroform_fields].delete(reference[:field])
-      end
-    end
-
-
-    private
-      def acroform_fields_for(page)
-        acroform_specifications.first.fetch(page).fetch(:fields)
-      end
-
-      def acroform_number_of_pages
-        acroform_specifications.first.keys.length
-      end
-
-      def acroform_field_info(form_fields, field_ref, page)
-
-        field_dict = deref(field_ref)
-
-        field = {}
-
-        field_type = deref(field_dict[:FT])
-
-        field[:name] = deref(field_dict[:T]).to_sym
-        field[:type] = field_type == :Tx ? :text : :image
-        field[:rect] = deref(field_dict[:Rect])
-        field[:x] = field[:rect][0]
-        field[:y] = field[:rect][3]
-        field[:width] = field[:rect][2] - field[:rect][0]
-        field[:height] = field[:rect][3] - field[:rect][1]
-        field[:page_number] = page
-
-        if field[:type] == :text
-          field[:description] = deref(field_dict[:TU])
-          field[:default_value] = deref(field_dict[:DV])
-          field[:value] = deref(field_dict[:V])
-          field[:size] = deref(field_dict[:DA]).split(" ")[1].to_i
-          field[:style] = deref(field_dict[:DA].split(" ")[0])
-          field[:align] = case deref(field_dict[:Q])
-          when 0 then :left
-          when 2 then :center
-          when 4 then :right
-          end
-          field[:max_length] = deref(field_dict[:MaxLen])
-          field[:multi_line] = deref(field_dict[:Ff]).to_i > 0 ? :true : :false
-          field[:border_width] = deref(field_dict[:BS]).fetch(:W, nil) if deref(field_dict[:BS])
-          field[:border_style] = deref(field_dict[:BS]).fetch(:S, nil) if deref(field_dict[:BS])
-          field[:border_color] = deref(field_dict[:MK]).fetch(:BC, nil) if deref(field_dict[:MK])
-          field[:background_color] = deref(field_dict[:MK]).fetch(:BG, nil) if deref(field_dict[:MK])
-        end
-
-        field
-
-      end
-
-      def acroform_specifications
-
-        specifications = {}
-        references = []
-
-        state.pages.each_with_index do |page, i|
-          form_fields = deref(page.dictionary.data[:Annots])
-
-          page_number = "page_#{i+1}".to_sym
-          specifications[page_number] = {}
-          specifications[page_number][:fields] = []
-
-          form_fields.map do |field_ref|
-            field_dict = deref(field_ref)
-            next unless deref(field_dict[:Type]) == :Annot and deref(field_dict[:Subtype]) == :Widget
-            next unless (deref(field_dict[:FT]) == :Tx || deref(field_dict[:FT]) == :Btn)
-
-            field = acroform_field_info(form_fields, field_ref, i+1)
-            specifications[page_number][:fields] << field
-
-            reference = {}
-            reference[:field] = field_ref
-            reference[:acroform_fields] = form_fields
-            references << reference
-          end
-        end
-        [specifications, references]
-      end
+      references = References.new(state)
+      references.delete!
 
     end
+  end
 end
 
 require 'prawn/document'
