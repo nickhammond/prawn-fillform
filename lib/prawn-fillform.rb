@@ -167,14 +167,14 @@ module Prawn
           if value
             if field.type == :text
               fill_color options[:font_color] || field.font_color
-              text_box value, :at => [field.x + 2, field.y - 1],
+              text_box value.to_s, :at => [field.x + 2, field.y - 1],
                                     :align => options[:align] || field.align,
                                     :width => options[:width] || field.width,
                                     :height => options[:height] || field.height,
                                     :valign => options[:valign] || :center,
                                     :size => options[:font_size] || field.font_size
             elsif field.type == :button
-              image value, :at => [field.x + 2, field.y - 1],
+              image value.to_s, :at => [field.x + 2, field.y - 1],
                                  :position =>  options[:position] || :center,
                                  :vposition => options[:vposition] || :center,
                                  :fit => options[:fit] || [field.width, field.height]
