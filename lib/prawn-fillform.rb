@@ -1,7 +1,10 @@
 # -*- encoding : utf-8 -*-
 require 'prawn-fillform/version'
+require 'open-uri'
+OpenURI::Buffer::StringMax = 0
 
 module Prawn
+
   module Fillform
 
     class Field
@@ -177,10 +180,11 @@ module Prawn
           options ||= {}
 
           if value
+            value = value.to_s
             if field.type == :text
               fill_color options[:font_color] || field.font_color
 
-              text_box value.to_s, :at => [field.x + 2, field.y - 1],
+              text_box value, :at => [field.x + 2, field.y - 1],
                                     :align => options[:align] || field.align,
                                     :width => options[:width] || field.width,
                                     :height => options[:height] || field.height,
@@ -190,10 +194,16 @@ module Prawn
             elsif field.type == :button
 
               bounding_box([field.x, field.y], :width => field.width, :height => field.height) do
-
-                image value.to_s, :position => options[:position] || :center,
+                if value =~ /http/
+                  image open(value), :position => options[:position] || :center,
                                   :vposition => options[:vposition] || :center,
                                   :fit => options[:fit] || [field.width, field.height]
+                else
+                  image value, :position => options[:position] || :center,
+                                  :vposition => options[:vposition] || :center,
+                                  :fit => options[:fit] || [field.width, field.height]
+                end
+
               end
             end
           end
