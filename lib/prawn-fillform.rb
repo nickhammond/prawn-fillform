@@ -111,31 +111,41 @@ module Prawn
       def initialize(state)
         @state = state
         @refs = []
+        @refs_2 = []
         collect!
       end
 
       def delete!
         @refs.each do |ref|
+          ref[:annots].delete(ref[:ref])
+        end
+        @refs_2.each do |ref|
           ref[:acroform_fields].delete(ref[:field])
-          deref(deref(ref[:page])[:Annots]).delete(ref[:field])
         end
       end
 
       protected
       def collect!
+        @state.pages.each_with_index do |page, i|
+          annots = deref(page.dictionary.data[:Annots])
+          annots.map do |ref|
+            reference = {}
+            reference[:ref] = ref
+            reference[:annots] = annots
+            @refs << reference
+          end
+        end
 
-       root = deref(@state.store.root)
-       acro_form = deref(root[:AcroForm])
-       form_fields = deref(acro_form[:Fields])
+        root = deref(@state.store.root)
+        acro_form = deref(root[:AcroForm])
+        form_fields = deref(acro_form[:Fields])
 
         @state.pages.each_with_index do |page, i|
           form_fields.map do |ref|
-            field_dict = deref(ref)
             reference = {}
-            reference[:page] = field_dict[:P]
             reference[:field] = ref
             reference[:acroform_fields] = form_fields
-            @refs << reference
+            @refs_2 << reference
           end
         end
       end
@@ -153,15 +163,11 @@ module Prawn
 
     def acroform_fields
       acroform = {}
-
-      root = deref(state.store.root)
-      acro_form = deref(root[:AcroForm])
-      form_fields = deref(acro_form[:Fields])
-
       state.pages.each_with_index do |page, i|
+        annots = deref(page.dictionary.data[:Annots])
         page_number = "page_#{i+1}".to_sym
         acroform[page_number] = []
-        form_fields.map do |ref|
+        annots.map do |ref|
           dictionary = deref(ref)
 
           next unless deref(dictionary[:Type]) == :Annot and deref(dictionary[:Subtype]) == :Widget
