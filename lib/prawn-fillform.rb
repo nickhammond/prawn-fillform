@@ -51,14 +51,6 @@ module Prawn
         deref(@dictionary[:Ff])
       end
 
-      def font_size
-        deref(@dictionary[:DA]).split(" ")[1].to_f
-      end
-
-      def font_color
-        Prawn::Graphics::Color.rgb2hex(deref(@dictionary[:DA]).split(" ")[3..5].collect { |e| e.to_f * 255 }).to_s
-      end
-
     end
 
     class Text < Field
@@ -78,6 +70,26 @@ module Prawn
 
       def max_length
         deref(@dictionary[:MaxLen]).to_i
+      end
+
+      def font_size
+        deref(@dictionary[:DA]).split(" ")[1].to_f
+      end
+
+      def font_style
+        style = case deref(@dictionary[:DA]).split(" ")[0].split(",").last.to_s.downcase
+        when "bold" then :bold
+        when "italic" then :italic
+        when "bold_italic" then :bold_italic
+        when "normal" then :normal
+        else
+          :normal
+        end
+        style
+      end
+
+      def font_color
+        Prawn::Graphics::Color.rgb2hex(deref(@dictionary[:DA]).split(" ")[3..5].collect { |e| e.to_f * 255 }).to_s
       end
 
       def type
@@ -167,17 +179,22 @@ module Prawn
           if value
             if field.type == :text
               fill_color options[:font_color] || field.font_color
+
               text_box value.to_s, :at => [field.x + 2, field.y - 1],
                                     :align => options[:align] || field.align,
                                     :width => options[:width] || field.width,
                                     :height => options[:height] || field.height,
                                     :valign => options[:valign] || :center,
-                                    :size => options[:font_size] || field.font_size
+                                    :size => options[:font_size] || field.font_size,
+                                    :style => options[:font_style] || field.font_style
             elsif field.type == :button
-              image value.to_s, :at => [field.x + 2, field.y - 1],
-                                 :position =>  options[:position] || :center,
-                                 :vposition => options[:vposition] || :center,
-                                 :fit => options[:fit] || [field.width, field.height]
+
+              bounding_box([field.x, field.y], :width => field.width, :height => field.height) do
+
+                image value.to_s, :position => options[:position] || :center,
+                                  :vposition => options[:vposition] || :center,
+                                  :fit => options[:fit] || [field.width, field.height]
+              end
             end
           end
         end
