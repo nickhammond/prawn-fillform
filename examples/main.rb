@@ -9,9 +9,9 @@ require 'prawn/fillform'
 
 data = {}
 data[:page_1] = {}
-data[:page_1][:firstname] = "Max"
-data[:page_1][:lastname] = "Mustermann"
-data[:page_1][:photo] = "../data/test.jpg"
+data[:page_1][:firstname] = { :value => "Max" }
+data[:page_1][:lastname] = { :value => "Mustermann" }
+data[:page_1][:photo] = { :value => "../data/test.jpg" }
 
 
 Prawn::Document.generate "../data/output.pdf", :template => "../data/template.pdf"  do |pdf|

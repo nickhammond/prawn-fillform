@@ -16,9 +16,9 @@ require 'prawn-fillform'
 
 data = {}
 data[:page_1] = {}
-data[:page_1][:firstname] = "Max"
-data[:page_1][:lastname] = "Mustermann"
-data[:page_1][:photo] = "test.jpg"
+data[:page_1][:firstname] = { :value => "Max" }
+data[:page_1][:lastname] = { :value => "Mustermann" }
+data[:page_1][:photo] = { :value => "test.jpg" }
 
 # Create a PDF file with predefined data Fields
 Prawn::Document.generate "output.pdf", :template => "template.pdf"  do |pdf|
