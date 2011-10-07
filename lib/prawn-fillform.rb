@@ -128,11 +128,13 @@ module Prawn
       def collect!
         @state.pages.each_with_index do |page, i|
           annots = deref(page.dictionary.data[:Annots])
-          annots.map do |ref|
-            reference = {}
-            reference[:ref] = ref
-            reference[:annots] = annots
-            @refs << reference
+          if annots
+            annots.map do |ref|
+              reference = {}
+              reference[:ref] = ref
+              reference[:annots] = annots
+              @refs << reference
+            end
           end
         end
 
@@ -167,18 +169,20 @@ module Prawn
         annots = deref(page.dictionary.data[:Annots])
         page_number = "page_#{i+1}".to_sym
         acroform[page_number] = []
-        annots.map do |ref|
-          dictionary = deref(ref)
+        if annots
+          annots.map do |ref|
+            dictionary = deref(ref)
 
-          next unless deref(dictionary[:Type]) == :Annot and deref(dictionary[:Subtype]) == :Widget
-          next unless (deref(dictionary[:FT]) == :Tx || deref(dictionary[:FT]) == :Btn)
+            next unless deref(dictionary[:Type]) == :Annot and deref(dictionary[:Subtype]) == :Widget
+            next unless (deref(dictionary[:FT]) == :Tx || deref(dictionary[:FT]) == :Btn)
 
-          type = deref(dictionary[:FT]).to_sym
-          case type
-          when :Tx
-            acroform[page_number] << Text.new(dictionary)
-          when :Btn
-            acroform[page_number] << Button.new(dictionary)
+            type = deref(dictionary[:FT]).to_sym
+            case type
+            when :Tx
+              acroform[page_number] << Text.new(dictionary)
+            when :Btn
+              acroform[page_number] << Button.new(dictionary)
+            end
           end
         end
       end
