@@ -6,7 +6,7 @@ OpenURI::Buffer::StringMax = 0
 module Prawn
 
   module Fillform
-
+    
     class Field
       include Prawn::Document::Internals
 
@@ -152,6 +152,25 @@ module Prawn
         end
       end
     end
+    
+    module XYOffsets
+      def fillform_x_offset
+        @fillform_x_offset ||= 2
+      end
+
+      def fillform_y_offset
+        @fillform_y_offset ||= -1
+      end
+
+      def set_fillform_xy_offset(x_offset, y_offset)
+        @fillform_x_offset = x_offset
+        @fillform_y_offset = y_offset
+      end
+
+      def use_adobe_xy_offsets!
+        set_fillform_xy_offset(2, -40)
+      end
+    end
 
     def acroform_field_names
       result = []
@@ -190,7 +209,6 @@ module Prawn
     end
 
     def fill_form_with(data={})
-
       acroform_fields.each do |page, fields|
         fields.each do |field|
           number = page.to_s.split("_").last.to_i
@@ -203,8 +221,10 @@ module Prawn
             value = value.to_s
             if field.type == :text
               fill_color options[:font_color] || field.font_color
+              x_offset = options[:x_offset] || self.class.fillform_x_offset
+              y_offset = options[:y_offset] || self.class.fillform_y_offset
 
-              text_box value, :at => [field.x + 2, field.y - 1],
+              text_box value, :at => [field.x + x_offset, field.y + y_offset],
                                     :align => options[:align] || field.align,
                                     :width => options[:width] || field.width,
                                     :height => options[:height] || field.height,
@@ -238,5 +258,6 @@ module Prawn
 end
 
 require 'prawn/document'
+Prawn::Document.extend Prawn::Fillform::XYOffsets
 Prawn::Document.send(:include, Prawn::Fillform)
 
