@@ -28,13 +28,13 @@ end
 
 Take a look in `examples` folder
 
-## Per Fork netinlet/prawn-fillform
+## Thanks to netinlet for fix field placement bug
 
 I was having issue with the form field placement (see https://github.com/moessimple/prawn-fillform/issues/1) 
 Scribus and Adobe Acrobat don't open pdf's in the same way so the formatting comes out differently. Much like
 opening a Word document in OpenOffice can some render with funny formatting.
 
-This fork added the ability to set :x_offset and :y_offset at the class level and on a per form basis.
+Added the ability to set :x_offset and :y_offset at the class level and on a per form basis.
 
 #Class Methods
 ```ruby
