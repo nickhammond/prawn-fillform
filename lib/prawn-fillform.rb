@@ -220,10 +220,11 @@ module Prawn
 
           if value
             value = value.to_s
+            x_offset = options[:x_offset] || self.class.fillform_x_offset
+            y_offset = options[:y_offset] || self.class.fillform_y_offset
+
             if field.type == :text
               fill_color options[:font_color] || field.font_color
-              x_offset = options[:x_offset] || self.class.fillform_x_offset
-              y_offset = options[:y_offset] || self.class.fillform_y_offset
 
               text_box value, :at => [field.x + x_offset, field.y + y_offset],
                                     :align => options[:align] || field.align,
@@ -234,7 +235,7 @@ module Prawn
                                     :style => options[:font_style] || field.font_style
             elsif field.type == :button
 
-              bounding_box([field.x, field.y], :width => field.width, :height => field.height) do
+              bounding_box([field.x + x_offset, field.y + y_offset], :width => field.width, :height => field.height) do
                 if value =~ /http/
                   image open(value), :position => options[:position] || :center,
                                   :vposition => options[:vposition] || :center,
