@@ -214,8 +214,11 @@ module Prawn
         fields.each do |field|
           number = page.to_s.split("_").last.to_i
           go_to_page(number)
-          value = data[page][field.name].fetch(:value) rescue nil
-          options = data[page][field.name].fetch(:options) rescue nil
+
+          field_hash = data[page].try(:[], field.name) || data[field.name]
+
+          value = field_hash.fetch(:value) rescue nil
+          options = field_hash.fetch(:options) rescue nil
           options ||= {}
 
           if value
