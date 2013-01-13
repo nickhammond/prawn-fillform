@@ -1,7 +1,7 @@
 # -*- encoding : utf-8 -*-
 module Prawn
   module Fillform
-    VERSION = "0.0.15"
+    VERSION = "0.0.16"
   end
 end
 
