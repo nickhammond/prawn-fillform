@@ -77,10 +77,13 @@ module Prawn
       end
 
       def font_size
+        return 12.0 unless deref(@dictionary[:DA])
         deref(@dictionary[:DA]).split(" ")[1].to_f
       end
 
       def font_style
+        return :normal unless deref(@dictionary[:DA])
+
         style = case deref(@dictionary[:DA]).split(" ")[0].split(",").last.to_s.downcase
         when "bold" then :bold
         when "italic" then :italic
@@ -93,6 +96,7 @@ module Prawn
       end
 
       def font_color
+        return "0000" unless deref(@dictionary[:DA])
         Prawn::Graphics::Color.rgb2hex(deref(@dictionary[:DA]).split(" ")[3..5].collect { |e| e.to_f * 255 }).to_s
       end
 
