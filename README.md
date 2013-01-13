@@ -1,5 +1,7 @@
 # Prawn/Fillform: Fill Text and Images through Acroform Fields
 
+### Sorry, I have unfortunately no time to maintain the code. but I accept pull request
+
 ## Install
 
 ```bash
