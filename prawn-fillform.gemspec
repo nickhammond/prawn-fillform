@@ -18,7 +18,7 @@ Gem::Specification.new do |s|
   s.require_paths = ["lib"]
 
   s.add_dependency "prawn"
-  s.add_dependency "active_support/all"
+  s.add_dependency "activesupport"
 
   # specify any dependencies here; for example:
   # s.add_development_dependency "rspec"

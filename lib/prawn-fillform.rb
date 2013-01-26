@@ -1,13 +1,15 @@
 # -*- encoding : utf-8 -*-
 require 'prawn-fillform/version'
 require 'open-uri'
+require 'active_support/all'
+
 OpenURI::Buffer.send :remove_const, 'StringMax' if OpenURI::Buffer.const_defined?('StringMax')
 OpenURI::Buffer.const_set 'StringMax', 0
 
 module Prawn
 
   module Fillform
-    
+
     class Field
       include Prawn::Document::Internals
 
@@ -157,7 +159,7 @@ module Prawn
         end
       end
     end
-    
+
     module XYOffsets
       def fillform_x_offset
         @fillform_x_offset ||= 2
