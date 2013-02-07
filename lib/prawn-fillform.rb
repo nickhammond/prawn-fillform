@@ -215,7 +215,7 @@ module Prawn
           number = page.to_s.split("_").last.to_i
           go_to_page(number)
 
-          field_hash = data[page].try(:[], field.name) || data[field.name]
+          field_hash = (page_data = data[page]).nil? ? data[field.name] : page_data[field.name]
 
           value = field_hash.fetch(:value) rescue nil
           options = field_hash.fetch(:options) rescue nil
