@@ -4,7 +4,6 @@
 $LOAD_PATH << File.expand_path('../../lib/', __FILE__)
 
 require 'prawn'
-require 'active_support/all'
 require 'prawn-fillform'
 
 data = {}

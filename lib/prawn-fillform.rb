@@ -1,7 +1,6 @@
 # -*- encoding : utf-8 -*-
 require 'prawn-fillform/version'
 require 'open-uri'
-require 'active_support/all'
 
 OpenURI::Buffer.send :remove_const, 'StringMax' if OpenURI::Buffer.const_defined?('StringMax')
 OpenURI::Buffer.const_set 'StringMax', 0
@@ -221,9 +220,10 @@ module Prawn
           number = page.to_s.split("_").last.to_i
           go_to_page(number)
 
-          field_hash = (page_data = data[page]).nil? ? data[field.name] : page_data[field.name]
-
-          value = field_hash.fetch(:value) rescue nil
+          value = data[page][field.name].fetch(:value) rescue nil
+          if value.nil?
+            value = data[field.name].fetch(:value) rescue nil
+          end
           options = field_hash.fetch(:options) rescue nil
           options ||= {}
 
