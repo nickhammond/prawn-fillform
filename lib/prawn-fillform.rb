@@ -224,7 +224,7 @@ module Prawn
           if value.nil?
             value = data[field.name].fetch(:value) rescue nil
           end
-          options = field_hash.fetch(:options) rescue nil
+          options = data[field.name].fetch(:options) rescue nil
           options ||= {}
 
           if value
