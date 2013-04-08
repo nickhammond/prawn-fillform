@@ -235,6 +235,7 @@ module Prawn
             if field.type == :text
               fill_color options[:font_color] || field.font_color
 
+	      font options[:font_face]
               text_box value, :at => [field.x + x_offset, field.y + y_offset],
                                     :align => options[:align] || field.align,
                                     :width => options[:width] || field.width,
