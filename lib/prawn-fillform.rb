@@ -112,6 +112,23 @@ module Prawn
       end
     end
 
+    class Checkbox < Field
+      YES = "\u2713".freeze
+      NO = "".freeze
+
+      def type
+        :checkbox
+      end
+
+      def font_style
+        :normal
+      end
+
+      def font_size
+        12.0
+      end
+    end
+
     class References
       include Prawn::Document::Internals
       def initialize(state)
@@ -206,7 +223,11 @@ module Prawn
             when :Tx
               acroform[page_number] << Text.new(dictionary)
             when :Btn
-              acroform[page_number] << Button.new(dictionary)
+              if deref(dictionary[:AP]).has_key? :D
+                acroform[page_number] << Checkbox.new(dictionary)
+              else
+                acroform[page_number] << Button.new(dictionary)
+              end
             end
           end
         end
@@ -245,8 +266,19 @@ module Prawn
                                     # Default to the document font size if the field size is 0
                                     :size => options[:font_size] || ((size = field.font_size) > 0.0 ? size : font_size),
                                     :style => options[:font_style] || field.font_style
-            elsif field.type == :button
+            elsif field.type == :checkbox
+              is_yes = (v = value.downcase) == "yes" || v == "1" || v == "true"
 
+              formatted_text_box [{
+                  text: is_yes ? Checkbox::YES : Checkbox::NO,
+                  font: "#{Prawn::BASEDIR}/data/fonts/DejaVuSans.ttf",
+                  size: field.font_size,
+                  styles: [field.font_style]
+                }],
+                :at => [field.x + x_offset, field.y + y_offset],
+                :width => options[:width] || field.width,
+                :height => options[:height] || field.height
+            elsif field.type == :button
               bounding_box([field.x + x_offset, field.y + y_offset], :width => field.width, :height => field.height) do
                 if value =~ /http/
                   image open(value), :position => options[:position] || :center,
