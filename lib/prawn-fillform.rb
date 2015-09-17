@@ -163,6 +163,7 @@ module Prawn
 
         root = deref(@state.store.root)
         acro_form = deref(root[:AcroForm])
+        return unless acro_form
         form_fields = deref(acro_form[:Fields])
 
         @state.pages.each_with_index do |page, i|
