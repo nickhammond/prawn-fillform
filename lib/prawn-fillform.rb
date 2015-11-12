@@ -9,6 +9,11 @@ module Prawn
 
   module Fillform
 
+    FLAG_REQUIRED       =  2.freeze
+    FLAG_NO_SPELLCHECK  = 23.freeze
+    FLAG_NO_SCROLL      = 24.freeze
+    FLAG_COMB           = 25.freeze
+
     class Field
       include Prawn::Document::Internals
 
@@ -53,7 +58,19 @@ module Prawn
       end
 
       def flags
-        deref(@dictionary[:Ff])
+        deref(@dictionary[:Ff]) || 0
+      end
+
+      def has_flag?(num)
+        # We're doing a bit of bit-magic here, essentially the flags for the field is a bitmask
+        # We create a dynamic bitmask for the correct position and check if that bit is set in the flags.
+        pos = (num-1)
+        bitmask = (1 << pos)
+        ((flags & bitmask) >> pos) == 1
+      end
+
+      def required?
+        has_flag?(FLAG_REQUIRED)
       end
 
     end
@@ -104,6 +121,18 @@ module Prawn
       def type
         :text
       end
+
+      def no_spellcheck?
+        has_flag?(FLAG_NO_SPELLCHECK)
+      end
+
+      def no_scroll?
+        has_flag?(FLAG_NO_SCROLL)
+      end
+
+      def comb?
+        has_flag?(FLAG_COMB)
+      end
     end
 
     class Button < Field
@@ -113,7 +142,7 @@ module Prawn
     end
 
     class Checkbox < Field
-      YES = "\u2713".freeze
+      YES = "X".freeze
       NO = "".freeze
 
       def type
@@ -255,42 +284,53 @@ module Prawn
             value = value.to_s
             x_offset = options[:x_offset] || self.class.fillform_x_offset
             y_offset = options[:y_offset] || self.class.fillform_y_offset
+            x_position = field.x + x_offset
+            y_position = field.y + y_offset
+            width = options[:width] || field.width
+            height = options[:height] || field.height
 
             if field.type == :text
               fill_color options[:font_color] || field.font_color
+              font options[:font_face]
 
-	      font options[:font_face]
-              text_box value, :at => [field.x + x_offset, field.y + y_offset],
-                                    :align => options[:align] || field.align,
-                                    :width => options[:width] || field.width,
-                                    :height => options[:height] || field.height,
-                                    :valign => options[:valign] || :center,
+              if field.comb? && field.no_spellcheck? && field.no_scroll?
+                bounding_box([x_position, y_position + 2], :width => width, :height => height) do
+                  table([value.split('')], :cell_style => { :borders => [] }, :column_widths => width/field.max_length ) do
+                    rows(0).height = field.height
+                  end
+                end
+              else
+                text_box value, :at => [x_position, y_position],
+                                      :align => options[:align] || field.align,
+                                      :width => width,
+                                      :height => height,
+                                      :valign => options[:valign] || :center,
 
-                                    # Default to the document font size if the field size is 0
-                                    :size => options[:font_size] || ((size = field.font_size) > 0.0 ? size : font_size),
-                                    :style => options[:font_style] || field.font_style
+                                      # Default to the document font size if the field size is 0
+                                      :size => options[:font_size] || ((size = field.font_size) > 0.0 ? size : font_size),
+                                      :style => options[:font_style] || field.font_style
+              end
             elsif field.type == :checkbox
               is_yes = (v = value.downcase) == "yes" || v == "1" || v == "true"
-
               formatted_text_box [{
                   text: is_yes ? Checkbox::YES : Checkbox::NO,
-                  font: "#{Prawn::BASEDIR}/data/fonts/DejaVuSans.ttf",
+                  font: 'Courier',
                   size: field.font_size,
                   styles: [field.font_style]
                 }],
-                :at => [field.x + x_offset, field.y + y_offset],
-                :width => options[:width] || field.width,
-                :height => options[:height] || field.height
+                :at => [x_position, y_position],
+                :width => width,
+                :height => height
             elsif field.type == :button
-              bounding_box([field.x + x_offset, field.y + y_offset], :width => field.width, :height => field.height) do
+              bounding_box([x_position, y_position], :width => width, :height => height) do
                 image_options = {
                   :position => options[:position] || :center,
                   :vposition => options[:vposition] || :center,
                 }
                 if options[:fill]
-                  image_options[:fit] = [field.width, field.height]
+                  image_options[:fit] = [width, height]
                 else
-                  image_options[:height] = field.height
+                  image_options[:height] = height
                 end
                 if value =~ /http/
                   image open(value), image_options
