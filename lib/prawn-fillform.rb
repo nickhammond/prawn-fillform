@@ -22,15 +22,15 @@ module Prawn
       end
 
       def description
-        deref(@dictionary[:TU])
+        get_dict_item(:TU)
       end
 
       def rect
-        deref(@dictionary[:Rect])
+        get_dict_item(:Rect)
       end
 
       def name
-        deref(@dictionary[:T]).to_sym
+        get_dict_item(:T).to_sym
       end
 
       def x
@@ -50,15 +50,15 @@ module Prawn
       end
 
       def value
-        deref(@dictionary[:V])
+        get_dict_item(:V)
       end
 
       def default_value
-        deref(@dictionary[:DV])
+        get_dict_item(:DV)
       end
 
       def flags
-        deref(@dictionary[:Ff]) || 0
+        get_dict_item(:Ff) || 0
       end
 
       def has_flag?(num)
@@ -73,12 +73,22 @@ module Prawn
         has_flag?(FLAG_REQUIRED)
       end
 
+    private
+      def get_dict_item(key)
+        if @dictionary[key]
+          deref(@dictionary[key])
+        else
+          parent = deref(@dictionary[:Parent])
+          deref(parent[key]) if parent
+        end
+      end
+
     end
 
     class Text < Field
 
       def align
-        case deref(@dictionary[:Q]).to_i
+        case get_dict_item(:Q).to_i
         when 0
           :left
         when 1
@@ -91,18 +101,18 @@ module Prawn
       end
 
       def max_length
-        deref(@dictionary[:MaxLen]).to_i
+        get_dict_item(:MaxLen).to_i
       end
 
       def font_size
-        return 12.0 unless deref(@dictionary[:DA])
-        deref(@dictionary[:DA]).split(" ")[1].to_f
+        return 12.0 unless get_dict_item(:DA)
+        get_dict_item(:DA).split(" ")[1].to_f
       end
 
       def font_style
-        return :normal unless deref(@dictionary[:DA])
+        return :normal unless get_dict_item(:DA)
 
-        style = case deref(@dictionary[:DA]).split(" ")[0].split(",").last.to_s.downcase
+        style = case get_dict_item(:DA).split(" ")[0].split(",").last.to_s.downcase
         when "bold" then :bold
         when "italic" then :italic
         when "bold_italic" then :bold_italic
@@ -114,8 +124,23 @@ module Prawn
       end
 
       def font_color
-        return "0000" unless deref(@dictionary[:DA])
-        Prawn::Graphics::Color.rgb2hex(deref(@dictionary[:DA]).split(" ")[3..5].collect { |e| e.to_f * 255 }).to_s
+        return "0000" unless get_dict_item(:DA)
+        Prawn::Graphics::Color.rgb2hex(get_dict_item(:DA).split(" ")[3..5].collect { |e| e.to_f * 255 }).to_s
+      end
+
+      def font_face
+        short_font_name = get_dict_item(:DA).split(" ")[0][1..-1].to_sym
+        if embedded_fonts
+          deref(embedded_fonts[short_font_name])[:BaseFont].to_s
+        else
+          nil
+        end
+      end
+
+      def embedded_fonts
+        ap = get_dict_item(:AP)
+        return nil if ap.nil?
+        deref(deref(ap[:N])[:Resources][:Font])
       end
 
       def type
@@ -242,13 +267,24 @@ module Prawn
         page_number = "page_#{i+1}".to_sym
         acroform[page_number] = []
         if annots
-          annots.map do |ref|
+          # Support annotations with parents
+          annots.flat_map do |ref|
             dictionary = deref(ref)
-
+            if dictionary[:Parent]
+              deref(deref(dictionary[:Parent])[:Kids]).map { |kid| deref(kid) }.select { |kid| kid[:P] == page.dictionary }
+            else
+              [dictionary]
+            end
+          end.each do |dictionary|
             next unless deref(dictionary[:Type]) == :Annot and deref(dictionary[:Subtype]) == :Widget
-            next unless (deref(dictionary[:FT]) == :Sig || deref(dictionary[:FT]) == :Tx || deref(dictionary[:FT]) == :Btn)
 
-            type = deref(dictionary[:FT]).to_sym
+            if dictionary[:Parent]
+              type = deref(dictionary[:Parent])[:FT]
+            else
+              type = deref(dictionary[:FT])
+            end
+            next unless (type == :Sig || type == :Tx || type == :Btn)
+
             case type
             when :Tx
               acroform[page_number] << Text.new(dictionary)
@@ -291,7 +327,7 @@ module Prawn
 
             if field.type == :text
               fill_color options[:font_color] || field.font_color
-              font options[:font_face]
+              font options[:font_face] || field.font_face
 
               if field.comb? && field.no_spellcheck? && field.no_scroll?
                 bounding_box([x_position, y_position + 2], :width => width, :height => height) do
