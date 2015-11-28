@@ -231,25 +231,6 @@ module Prawn
       end
     end
 
-    module XYOffsets
-      def fillform_x_offset
-        @fillform_x_offset ||= 2
-      end
-
-      def fillform_y_offset
-        @fillform_y_offset ||= -1
-      end
-
-      def set_fillform_xy_offset(x_offset, y_offset)
-        @fillform_x_offset = x_offset
-        @fillform_y_offset = y_offset
-      end
-
-      def use_adobe_xy_offsets!
-        set_fillform_xy_offset(2, -40)
-      end
-    end
-
     def acroform_field_names
       result = []
       acroform_fields.each do |page, fields|
@@ -263,130 +244,146 @@ module Prawn
     def acroform_fields
       acroform = {}
       state.pages.each_with_index do |page, i|
-        annots = deref(page.dictionary.data[:Annots])
         page_number = "page_#{i+1}".to_sym
-        acroform[page_number] = []
-        if annots
-          # Support annotations with parents
-          annots.flat_map do |ref|
-            dictionary = deref(ref)
-            if dictionary[:Parent]
-              deref(deref(dictionary[:Parent])[:Kids]).map { |kid| deref(kid) }.select { |kid| kid[:P] == page.dictionary }
-            else
-              [dictionary]
-            end
-          end.each do |dictionary|
-            next unless deref(dictionary[:Type]) == :Annot and deref(dictionary[:Subtype]) == :Widget
-
-            if dictionary[:Parent]
-              type = deref(dictionary[:Parent])[:FT]
-            else
-              type = deref(dictionary[:FT])
-            end
-            next unless (type == :Sig || type == :Tx || type == :Btn)
-
-            case type
-            when :Tx
-              acroform[page_number] << Text.new(dictionary)
-            when :Btn
-              if deref(dictionary[:AP]).has_key? :D
-                acroform[page_number] << Checkbox.new(dictionary)
-              else
-                acroform[page_number] << Button.new(dictionary)
-              end
-            when :Sig
-              acroform[page_number] << Button.new(dictionary)
-            end
-          end
-        end
+        acroform[page_number] = acroform_fields_for_page(page)
       end
       acroform
     end
 
-    def fill_form_with(data={})
-      acroform_fields.each do |page, fields|
-        fields.each do |field|
-          number = page.to_s.split("_").last.to_i
-          go_to_page(number)
-
-          value = data[page][field.name].fetch(:value) rescue nil
-          if value.nil?
-            value = data[field.name].fetch(:value) rescue nil
+    def acroform_fields_for_page(page)
+      annots = deref(page.dictionary.data[:Annots])
+      page_fields = []
+      if annots
+        # Support annotations with parents
+        annots.flat_map do |ref|
+          dictionary = deref(ref)
+          if dictionary[:Parent]
+            deref(deref(dictionary[:Parent])[:Kids]).map { |kid| deref(kid) }.select { |kid| kid[:P] == page.dictionary }
+          else
+            [dictionary]
           end
-          options = data[field.name].fetch(:options) rescue nil
-          options ||= {}
+        end.each do |dictionary|
+          next unless deref(dictionary[:Type]) == :Annot and deref(dictionary[:Subtype]) == :Widget
 
-          if value
-            value = value.to_s
-            x_offset = options[:x_offset] || self.class.fillform_x_offset
-            y_offset = options[:y_offset] || self.class.fillform_y_offset
-            x_position = field.x + x_offset
-            y_position = field.y + y_offset
-            width = options[:width] || field.width
-            height = options[:height] || field.height
+          if dictionary[:Parent]
+            type = deref(dictionary[:Parent])[:FT]
+          else
+            type = deref(dictionary[:FT])
+          end
+          next unless (type == :Sig || type == :Tx || type == :Btn)
 
-            if field.type == :text
-              fill_color options[:font_color] || field.font_color
-              font options[:font_face] || field.font_face
+          case type
+          when :Tx
+            page_fields << Text.new(dictionary)
+          when :Btn
+            if deref(dictionary[:AP]).has_key? :D
+              page_fields << Checkbox.new(dictionary)
+            else
+              page_fields << Button.new(dictionary)
+            end
+          when :Sig
+            page_fields << Button.new(dictionary)
+          end
+        end
+      end
 
-              if field.comb? && field.no_spellcheck? && field.no_scroll?
-                bounding_box([x_position, y_position + 2], :width => width, :height => height) do
-                  table([value.split('')], :cell_style => { :borders => [] }, :column_widths => width/field.max_length ) do
-                    rows(0).height = field.height
-                  end
+      page_fields
+    end
+
+    def fetch_field_attribute(data, page, field_name, attribute)
+      value = data[page][field_name].fetch(attribute) rescue nil
+      if value.nil?
+        value = data[field_name].fetch(attribute) rescue nil
+      end
+      value
+    end
+
+    # Found by manual adjustment until it looked right.
+    FILLFORM_X_OFFSET = -34
+    FILLFORM_Y_OFFSET = -38
+
+    def fill_form_page_with(data, x_offset: FILLFORM_X_OFFSET, y_offset: FILLFORM_Y_OFFSET)
+      acroform_fields_for_page(page).each do |field|
+        value = fetch_field_attribute(data, page, field.name, :value)
+        if value
+          options = fetch_field_attribute(data, page, field.name, :options) || {}
+          value = value.to_s
+          x_offset = options[:x_offset] || x_offset
+          y_offset = options[:y_offset] || y_offset
+          x_position = field.x + x_offset
+          y_position = field.y + y_offset
+          width = options[:width] || field.width
+          height = options[:height] || field.height
+
+          if field.type == :text
+            fill_color options[:font_color] || field.font_color
+            font options[:font_face] || field.font_face
+
+            if field.comb? && field.no_spellcheck? && field.no_scroll?
+              bounding_box([x_position, y_position + 2], :width => width, :height => height) do
+                table([value.split('')], :cell_style => { :borders => [] }, :column_widths => width/field.max_length ) do
+                  rows(0).height = field.height
                 end
-              else
-                text_box value, :at => [x_position, y_position],
-                                      :align => options[:align] || field.align,
-                                      :width => width,
-                                      :height => height,
-                                      :valign => options[:valign] || :center,
-
-                                      # Default to the document font size if the field size is 0
-                                      :size => options[:font_size] || ((size = field.font_size) > 0.0 ? size : font_size),
-                                      :style => options[:font_style] || field.font_style
               end
-            elsif field.type == :checkbox
-              is_yes = (v = value.downcase) == "yes" || v == "1" || v == "true"
-              formatted_text_box [{
-                  text: is_yes ? Checkbox::YES : Checkbox::NO,
-                  font: 'Courier',
-                  size: field.font_size,
-                  styles: [field.font_style]
-                }],
-                :at => [x_position, y_position],
+            else
+              text_box value, :at => [x_position, y_position],
+                :align => options[:align] || field.align,
                 :width => width,
-                :height => height
-            elsif field.type == :button
-              bounding_box([x_position, y_position], :width => width, :height => height) do
-                image_options = {
-                  :position => options[:position] || :center,
-                  :vposition => options[:vposition] || :center,
-                }
-                if options[:fill]
-                  image_options[:fit] = [width, height]
-                else
-                  image_options[:height] = height
-                end
-                if value =~ /http/
-                  image open(value), image_options
-                else
-                  image value, image_options
-                end
+                :height => height,
+                :valign => options[:valign] || :center,
 
+                # Default to the document font size if the field size is 0
+                :size => options[:font_size] || ((size = field.font_size) > 0.0 ? size : font_size),
+                :style => options[:font_style] || field.font_style
+            end
+          elsif field.type == :checkbox
+            is_yes = (v = value.downcase) == "yes" || v == "1" || v == "true"
+            formatted_text_box [{
+              text: is_yes ? Checkbox::YES : Checkbox::NO,
+              font: 'Courier',
+              size: field.font_size,
+              styles: [field.font_style]
+            }],
+              :at => [x_position, y_position],
+              :width => width,
+              :height => height
+          elsif field.type == :button
+            bounding_box([x_position, y_position], :width => width, :height => height) do
+              image_options = {
+                :position => options[:position] || :center,
+                :vposition => options[:vposition] || :center,
+              }
+              if options[:fill]
+                image_options[:fit] = [width, height]
+              else
+                image_options[:height] = height
+              end
+              if value =~ /http/
+                image open(value), image_options
+              else
+                image value, image_options
               end
             end
           end
         end
       end
+    end
 
+    def fill_form_with(data={})
+      state.pages.each_index do |number|
+        go_to_page(number)
+        fill_form_page_with(data)
+      end
+
+      remove_form_fields
+    end
+
+    def remove_form_fields
       references = References.new(state)
       references.delete!
-
     end
   end
 end
 
 require 'prawn/document'
-Prawn::Document.extend Prawn::Fillform::XYOffsets
 Prawn::Document.send(:include, Prawn::Fillform)
