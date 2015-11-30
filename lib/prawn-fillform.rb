@@ -128,12 +128,18 @@ module Prawn
         Prawn::Graphics::Color.rgb2hex(get_dict_item(:DA).split(" ")[3..5].collect { |e| e.to_f * 255 }).to_s
       end
 
+      DEFAULT_PDF_FONT_FACES = {
+        Cour: 'Courier',
+        Helv: 'Helvetica',
+        TiRo: 'Times-Roman'
+      }
+
       def font_face
         short_font_name = get_dict_item(:DA).split(" ")[0][1..-1].to_sym
         if embedded_fonts
           deref(embedded_fonts[short_font_name])[:BaseFont].to_s
         else
-          nil
+          DEFAULT_PDF_FONT_FACES[short_font_name]
         end
       end
 
