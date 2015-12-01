@@ -375,10 +375,10 @@ module Prawn
       end
     end
 
-    def fill_form_with(data={})
+    def fill_form_with(data={}, x_offset: FILLFORM_X_OFFSET, y_offset: FILLFORM_Y_OFFSET)
       state.pages.each_index do |number|
         go_to_page(number)
-        fill_form_page_with(data)
+        fill_form_page_with(data, x_offset: x_offset, y_offset: y_offset)
       end
 
       remove_form_fields
