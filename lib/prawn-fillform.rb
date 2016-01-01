@@ -173,19 +173,8 @@ module Prawn
     end
 
     class Checkbox < Field
-      YES = "X".freeze
-      NO = "".freeze
-
       def type
         :checkbox
-      end
-
-      def font_style
-        :normal
-      end
-
-      def font_size
-        12.0
       end
     end
 
@@ -297,7 +286,9 @@ module Prawn
     end
 
     def fetch_field_attribute(data, page, field_name, attribute)
-      value = data[page][field_name].fetch(attribute) rescue nil
+      page_number = page.to_s.split('_').last.to_i + 1
+      page_key = "page_#{page_number}".to_sym
+      value = data[page_key][field_name].fetch(attribute) rescue nil
       if value.nil?
         value = data[field_name].fetch(attribute) rescue nil
       end
@@ -344,15 +335,17 @@ module Prawn
             end
           elsif field.type == :checkbox
             is_yes = (v = value.downcase) == "yes" || v == "1" || v == "true"
-            formatted_text_box [{
-              text: is_yes ? Checkbox::YES : Checkbox::NO,
-              font: 'Courier',
-              size: field.font_size,
-              styles: [field.font_style]
-            }],
-              :at => [x_position, y_position],
-              :width => width,
-              :height => height
+            if is_yes
+              stroke do
+                # Determine relative co-ordinates based on current bounding box
+                check_left = field.x - bounds.absolute_left
+                check_bottom = field.y - field.height - bounds.absolute_bottom
+
+                # Draw check mark
+                line check_left, check_bottom, check_left + field.width, check_bottom + field.height
+                line check_left + field.width, check_bottom, check_left, check_bottom + field.height
+              end
+            end
           elsif field.type == :button
             bounding_box([x_position, y_position], :width => width, :height => height) do
               image_options = {
