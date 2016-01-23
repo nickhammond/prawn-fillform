@@ -299,7 +299,7 @@ module Prawn
     FILLFORM_X_OFFSET = -34
     FILLFORM_Y_OFFSET = -38
 
-    def fill_form_page_with(data, x_offset: FILLFORM_X_OFFSET, y_offset: FILLFORM_Y_OFFSET)
+    def fill_form_page_with(data, x_offset: FILLFORM_X_OFFSET, y_offset: FILLFORM_Y_OFFSET, allow_comb_overflow: false)
       acroform_fields_for_page(page).each do |field|
         value = fetch_field_attribute(data, page, field.name, :value)
         if value
@@ -316,11 +316,32 @@ module Prawn
             fill_color options[:font_color] || field.font_color
             font options[:font_face] || field.font_face
 
-            if field.comb? && field.no_spellcheck? && field.no_scroll?
-              bounding_box([x_position, y_position + 2], :width => width, :height => height) do
-                table([value.split('')], :cell_style => { :borders => [] }, :column_widths => width/field.max_length ) do
-                  rows(0).height = field.height
-                end
+            # Default to the document font size if the field size is 0
+            size = options[:font_size] || ((size = field.font_size) > 0.0 ? size : font_size)
+            style = options[:font_style] || field.font_style
+
+            # Check if the comb field can be drawn
+            draw_comb_field = field.comb? && field.no_spellcheck? && field.no_scroll?
+            if draw_comb_field && value.length > field.max_length
+              if allow_comb_overflow
+                # Fallback to drawing a text box
+                draw_comb_field = false
+              else
+                raise Prawn::Errors::CannotFit
+              end
+            end
+
+            if draw_comb_field
+              x_spacing = width / field.max_length
+              value.split('').each_with_index do |c, index|
+                text_box c, :at => [x_position + x_spacing * index, y_position],
+                  :align => :center,
+                  :width => x_spacing,
+                  :height => height,
+                  :valign => options[:valign] || :center,
+                  :size => size,
+                  :style => style,
+                  :overflow => :strink_to_fit
               end
             else
               text_box value, :at => [x_position, y_position],
@@ -328,10 +349,8 @@ module Prawn
                 :width => width,
                 :height => height,
                 :valign => options[:valign] || :center,
-
-                # Default to the document font size if the field size is 0
-                :size => options[:font_size] || ((size = field.font_size) > 0.0 ? size : font_size),
-                :style => options[:font_style] || field.font_style
+                :size => size,
+                :style => style
             end
           elsif field.type == :checkbox
             is_yes = (v = value.downcase) == "yes" || v == "1" || v == "true"
@@ -368,10 +387,10 @@ module Prawn
       end
     end
 
-    def fill_form_with(data, x_offset: FILLFORM_X_OFFSET, y_offset: FILLFORM_Y_OFFSET)
+    def fill_form_with(data, x_offset: FILLFORM_X_OFFSET, y_offset: FILLFORM_Y_OFFSET, allow_comb_overflow: false)
       state.pages.each_index do |number|
         go_to_page(number)
-        fill_form_page_with(data, x_offset: x_offset, y_offset: y_offset)
+        fill_form_page_with(data, x_offset: x_offset, y_offset: y_offset, allow_comb_overflow: allow_comb_overflow)
       end
 
       remove_form_fields
