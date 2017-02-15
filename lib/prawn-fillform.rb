@@ -30,7 +30,7 @@ module Prawn
       end
 
       def name
-        get_dict_item(:T).to_sym
+        get_dict_item(:T)
       end
 
       def x
@@ -258,7 +258,7 @@ module Prawn
             [dictionary]
           end
         end.each do |dictionary|
-          next unless deref(dictionary[:Type]) == :Annot and deref(dictionary[:Subtype]) == :Widget
+          next unless deref(dictionary[:Subtype]) == :Widget
 
           if dictionary[:Parent]
             type = deref(dictionary[:Parent])[:FT]
