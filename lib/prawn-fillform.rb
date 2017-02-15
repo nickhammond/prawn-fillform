@@ -1,11 +1,18 @@
 # -*- encoding : utf-8 -*-
 require 'prawn-fillform/version'
 require 'open-uri'
-OpenURI::Buffer::StringMax = 0
+
+OpenURI::Buffer.send :remove_const, 'StringMax' if OpenURI::Buffer.const_defined?('StringMax')
+OpenURI::Buffer.const_set 'StringMax', 0
 
 module Prawn
 
   module Fillform
+
+    FLAG_REQUIRED       =  2.freeze
+    FLAG_NO_SPELLCHECK  = 23.freeze
+    FLAG_NO_SCROLL      = 24.freeze
+    FLAG_COMB           = 25.freeze
 
     class Field
       include Prawn::Document::Internals
@@ -15,15 +22,15 @@ module Prawn
       end
 
       def description
-        deref(@dictionary[:TU])
+        get_dict_item(:TU)
       end
 
       def rect
-        deref(@dictionary[:Rect])
+        get_dict_item(:Rect)
       end
 
       def name
-        deref(@dictionary[:T]).to_sym
+        get_dict_item(:T)
       end
 
       def x
@@ -43,15 +50,37 @@ module Prawn
       end
 
       def value
-        deref(@dictionary[:V])
+        get_dict_item(:V)
       end
 
       def default_value
-        deref(@dictionary[:DV])
+        get_dict_item(:DV)
       end
 
       def flags
-        deref(@dictionary[:Ff])
+        get_dict_item(:Ff) || 0
+      end
+
+      def has_flag?(num)
+        # We're doing a bit of bit-magic here, essentially the flags for the field is a bitmask
+        # We create a dynamic bitmask for the correct position and check if that bit is set in the flags.
+        pos = (num-1)
+        bitmask = (1 << pos)
+        ((flags & bitmask) >> pos) == 1
+      end
+
+      def required?
+        has_flag?(FLAG_REQUIRED)
+      end
+
+    private
+      def get_dict_item(key)
+        if @dictionary[key]
+          deref(@dictionary[key])
+        else
+          parent = deref(@dictionary[:Parent])
+          deref(parent[key]) if parent
+        end
       end
 
     end
@@ -59,7 +88,7 @@ module Prawn
     class Text < Field
 
       def align
-        case deref(@dictionary[:Q]).to_i
+        case get_dict_item(:Q).to_i
         when 0
           :left
         when 1
@@ -72,15 +101,18 @@ module Prawn
       end
 
       def max_length
-        deref(@dictionary[:MaxLen]).to_i
+        get_dict_item(:MaxLen).to_i
       end
 
       def font_size
-        deref(@dictionary[:DA]).split(" ")[1].to_f
+        return 12.0 unless get_dict_item(:DA)
+        get_dict_item(:DA).split(" ")[1].to_f
       end
 
       def font_style
-        style = case deref(@dictionary[:DA]).split(" ")[0].split(",").last.to_s.downcase
+        return :normal unless get_dict_item(:DA)
+
+        style = case get_dict_item(:DA).split(" ")[0].split(",").last.to_s.downcase
         when "bold" then :bold
         when "italic" then :italic
         when "bold_italic" then :bold_italic
@@ -92,17 +124,57 @@ module Prawn
       end
 
       def font_color
-        Prawn::Graphics::Color.rgb2hex(deref(@dictionary[:DA]).split(" ")[3..5].collect { |e| e.to_f * 255 }).to_s
+        return "0000" unless get_dict_item(:DA)
+        Prawn::Graphics::Color.rgb2hex(get_dict_item(:DA).split(" ")[3..5].collect { |e| e.to_f * 255 }).to_s
+      end
+
+      DEFAULT_PDF_FONT_FACES = {
+        Cour: 'Courier',
+        Helv: 'Helvetica',
+        TiRo: 'Times-Roman'
+      }
+
+      def font_face
+        short_font_name = get_dict_item(:DA).split(" ")[0][1..-1].to_sym
+        if embedded_fonts
+          deref(embedded_fonts[short_font_name])[:BaseFont].to_s
+        else
+          DEFAULT_PDF_FONT_FACES[short_font_name]
+        end
+      end
+
+      def embedded_fonts
+        ap = get_dict_item(:AP)
+        return nil if ap.nil?
+        deref(deref(ap[:N])[:Resources][:Font])
       end
 
       def type
         :text
+      end
+
+      def no_spellcheck?
+        has_flag?(FLAG_NO_SPELLCHECK)
+      end
+
+      def no_scroll?
+        has_flag?(FLAG_NO_SCROLL)
+      end
+
+      def comb?
+        has_flag?(FLAG_COMB)
       end
     end
 
     class Button < Field
       def type
         :button
+      end
+    end
+
+    class Checkbox < Field
+      def type
+        :checkbox
       end
     end
 
@@ -140,6 +212,7 @@ module Prawn
 
         root = deref(@state.store.root)
         acro_form = deref(root[:AcroForm])
+        return unless acro_form
         form_fields = deref(acro_form[:Fields])
 
         @state.pages.each_with_index do |page, i|
@@ -166,77 +239,169 @@ module Prawn
     def acroform_fields
       acroform = {}
       state.pages.each_with_index do |page, i|
-        annots = deref(page.dictionary.data[:Annots])
         page_number = "page_#{i+1}".to_sym
-        acroform[page_number] = []
-        if annots
-          annots.map do |ref|
-            dictionary = deref(ref)
-
-            next unless deref(dictionary[:Type]) == :Annot and deref(dictionary[:Subtype]) == :Widget
-            next unless (deref(dictionary[:FT]) == :Tx || deref(dictionary[:FT]) == :Btn)
-
-            type = deref(dictionary[:FT]).to_sym
-            case type
-            when :Tx
-              acroform[page_number] << Text.new(dictionary)
-            when :Btn
-              acroform[page_number] << Button.new(dictionary)
-            end
-          end
-        end
+        acroform[page_number] = acroform_fields_for_page(page)
       end
       acroform
     end
 
-    def fill_form_with(data={})
+    def acroform_fields_for_page(page)
+      annots = deref(page.dictionary.data[:Annots])
+      page_fields = []
+      if annots
+        # Support annotations with parents
+        annots.flat_map do |ref|
+          dictionary = deref(ref)
+          if dictionary[:Parent]
+            deref(deref(dictionary[:Parent])[:Kids]).map { |kid| deref(kid) }.select { |kid| kid[:P] == page.dictionary }
+          else
+            [dictionary]
+          end
+        end.each do |dictionary|
+          next unless deref(dictionary[:Subtype]) == :Widget
 
-      acroform_fields.each do |page, fields|
-        fields.each do |field|
-          number = page.to_s.split("_").last.to_i
-          go_to_page(number)
-          value = data[page][field.name].fetch(:value) rescue nil
-          options = data[page][field.name].fetch(:options) rescue nil
-          options ||= {}
+          if dictionary[:Parent]
+            type = deref(dictionary[:Parent])[:FT]
+          else
+            type = deref(dictionary[:FT])
+          end
+          next unless (type == :Sig || type == :Tx || type == :Btn)
 
-          if value
-            value = value.to_s
-            if field.type == :text
-              fill_color options[:font_color] || field.font_color
+          case type
+          when :Tx
+            page_fields << Text.new(dictionary)
+          when :Btn
+            if deref(dictionary[:AP]).has_key? :D
+              page_fields << Checkbox.new(dictionary)
+            else
+              page_fields << Button.new(dictionary)
+            end
+          when :Sig
+            page_fields << Button.new(dictionary)
+          end
+        end
+      end
 
-              text_box value, :at => [field.x + 2, field.y - 1],
-                                    :align => options[:align] || field.align,
-                                    :width => options[:width] || field.width,
-                                    :height => options[:height] || field.height,
-                                    :valign => options[:valign] || :center,
-                                    :size => options[:font_size] || field.font_size,
-                                    :style => options[:font_style] || field.font_style
-            elsif field.type == :button
+      page_fields
+    end
 
-              bounding_box([field.x, field.y], :width => field.width, :height => field.height) do
-                if value =~ /http/
-                  image open(value), :position => options[:position] || :center,
-                                  :vposition => options[:vposition] || :center,
-                                  :fit => options[:fit] || [field.width, field.height]
-                else
-                  image value, :position => options[:position] || :center,
-                                  :vposition => options[:vposition] || :center,
-                                  :fit => options[:fit] || [field.width, field.height]
-                end
+    def fetch_field_attribute(data, page, field_name, attribute)
+      page_number = page.to_s.split('_').last.to_i + 1
+      page_key = "page_#{page_number}".to_sym
+      value = data[page_key][field_name].fetch(attribute) rescue nil
+      if value.nil?
+        value = data[field_name].fetch(attribute) rescue nil
+      end
+      value
+    end
 
+    # Found by manual adjustment until it looked right.
+    FILLFORM_X_OFFSET = -34
+    FILLFORM_Y_OFFSET = -38
+
+    def fill_form_page_with(data, x_offset: FILLFORM_X_OFFSET, y_offset: FILLFORM_Y_OFFSET, allow_comb_overflow: false)
+      acroform_fields_for_page(page).each do |field|
+        value = fetch_field_attribute(data, page, field.name, :value)
+        if value
+          options = fetch_field_attribute(data, page, field.name, :options) || {}
+          value = value.to_s
+          x_offset = options[:x_offset] || x_offset
+          y_offset = options[:y_offset] || y_offset
+          x_position = field.x + x_offset
+          y_position = field.y + y_offset
+          width = options[:width] || field.width
+          height = options[:height] || field.height
+
+          if field.type == :text
+            fill_color options[:font_color] || field.font_color
+            font options[:font_face] || field.font_face
+
+            # Default to the document font size if the field size is 0
+            size = options[:font_size] || ((size = field.font_size) > 0.0 ? size : font_size)
+            style = options[:font_style] || field.font_style
+
+            # Check if the comb field can be drawn
+            draw_comb_field = field.comb? && field.no_spellcheck? && field.no_scroll?
+            if draw_comb_field && value.length > field.max_length
+              if allow_comb_overflow
+                # Fallback to drawing a text box
+                draw_comb_field = false
+              else
+                raise Prawn::Errors::CannotFit
+              end
+            end
+
+            if draw_comb_field
+              x_spacing = width / field.max_length
+              value.split('').each_with_index do |c, index|
+                text_box c, :at => [x_position + x_spacing * index, y_position],
+                  :align => :center,
+                  :width => x_spacing,
+                  :height => height,
+                  :valign => options[:valign] || :center,
+                  :size => size,
+                  :style => style,
+                  :overflow => :strink_to_fit
+              end
+            else
+              text_box value, :at => [x_position, y_position],
+                :align => options[:align] || field.align,
+                :width => width,
+                :height => height,
+                :valign => options[:valign] || :center,
+                :size => size,
+                :style => style
+            end
+          elsif field.type == :checkbox
+            is_yes = (v = value.downcase) == "yes" || v == "1" || v == "true"
+            if is_yes
+              stroke do
+                # Determine relative co-ordinates based on current bounding box
+                check_left = field.x - bounds.absolute_left
+                check_bottom = field.y - field.height - bounds.absolute_bottom
+
+                # Draw check mark
+                line check_left, check_bottom, check_left + field.width, check_bottom + field.height
+                line check_left + field.width, check_bottom, check_left, check_bottom + field.height
+              end
+            end
+          elsif field.type == :button
+            bounding_box([x_position, y_position], :width => width, :height => height) do
+              image_options = {
+                :position => options[:position] || :center,
+                :vposition => options[:vposition] || :center,
+              }
+              if options[:fill]
+                image_options[:fit] = [width, height]
+              else
+                image_options[:height] = height
+              end
+              if value =~ /http/
+                image open(value), image_options
+              else
+                image value, image_options
               end
             end
           end
         end
       end
+    end
 
+    def fill_form_with(data, x_offset: FILLFORM_X_OFFSET, y_offset: FILLFORM_Y_OFFSET, allow_comb_overflow: false)
+      state.pages.each_index do |number|
+        go_to_page(number)
+        fill_form_page_with(data, x_offset: x_offset, y_offset: y_offset, allow_comb_overflow: allow_comb_overflow)
+      end
+
+      remove_form_fields
+    end
+
+    def remove_form_fields
       references = References.new(state)
       references.delete!
-
     end
   end
 end
 
 require 'prawn/document'
 Prawn::Document.send(:include, Prawn::Fillform)
-
