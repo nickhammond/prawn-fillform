@@ -271,7 +271,8 @@ module Prawn
           when :Tx
             page_fields << Text.new(dictionary)
           when :Btn
-            if deref(dictionary[:AP]).has_key? :D
+            ap = deref(dictionary[:AP])
+            if ap.present? && ap.has_key?(:D)
               page_fields << Checkbox.new(dictionary)
             else
               page_fields << Button.new(dictionary)
