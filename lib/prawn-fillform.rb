@@ -252,7 +252,7 @@ module Prawn
         # Support annotations with parents
         annots.flat_map do |ref|
           dictionary = deref(ref)
-          if dictionary[:Parent]
+          if dictionary[:Parent] && dictionary[:Parent][:Kids]
             deref(deref(dictionary[:Parent])[:Kids]).map { |kid| deref(kid) }.select { |kid| kid[:P] == page.dictionary }
           else
             [dictionary]
