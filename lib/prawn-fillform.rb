@@ -165,7 +165,7 @@ module Prawn
 
     def acroform_fields
       acroform = {}
-      state.pages.each_with_index do |page, i|
+      @state.pages.each_with_index do |page, i|
         annots = deref(page.dictionary.data[:Annots])
         page_number = "page_#{i+1}".to_sym
         acroform[page_number] = []
@@ -230,7 +230,7 @@ module Prawn
         end
       end
 
-      references = References.new(state)
+      references = References.new(@state)
       references.delete!
 
     end
