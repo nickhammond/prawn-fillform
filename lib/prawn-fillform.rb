@@ -312,6 +312,7 @@ module Prawn
           y_position = field.y + y_offset
           width = options[:width] || field.width
           height = options[:height] || field.height
+          overflow = options[:overflow]
 
           if field.type == :text
             fill_color options[:font_color] || field.font_color
@@ -342,7 +343,7 @@ module Prawn
                   :valign => options[:valign] || :center,
                   :size => size,
                   :style => style,
-                  :overflow => :strink_to_fit
+                  :overflow => :shrink_to_fit
               end
             else
               text_box value, :at => [x_position, y_position],
@@ -351,7 +352,8 @@ module Prawn
                 :height => height,
                 :valign => options[:valign] || :center,
                 :size => size,
-                :style => style
+                :style => style,
+                :overflow => overflow
             end
           elsif field.type == :checkbox
             is_yes = (v = value.downcase) == "yes" || v == "1" || v == "true"
